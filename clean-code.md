@@ -118,10 +118,10 @@ for (int j=0; j < NUMBER_OF_TASKS; j++) {
 每个人的思维映射可能存在差异，名称要直接明了，避免取具有特殊含义的映射性名称
 
 ### 以名词或短语作为类名
-类名尽量用名词或名词短语，比如Customer, WikiPage,Account, 或 AddressParser。
+* 类名尽量用名词或名词短语，比如Customer, WikiPage,Account, 或 AddressParser。
 
 ### 以动词或动词词组命名方法
-方法名尽量用动词或动词短语。比如postPayment, deletePage, 或者save。
+* 方法名尽量用动词或动词短语。比如postPayment, deletePage, 或者save。
 
 ### 名称要一目了然，通俗易懂，避免使用具有隐晦含义的词
 eatMyShorts =>abort
@@ -139,7 +139,7 @@ eatMyShorts =>abort
 * 开发用于零售业务的系统中使用零售业的专有名词：SKU代表库存量，DeadStock代表坏账等
 
 ### 添加有意义的语境
-举个栗子，假如我们有名为firstName、lastName、street、houseNumber、city、state和zipcode的变量。当他们搁一块儿的时候，的确是构成了一个地址。不过，假如只是在某个方法中看到一个孤零零的state呢？我们会推断这个变量是地址的一部分吗？
+* 举个栗子，假如我们有名为firstName、lastName、street、houseNumber、city、state和zipcode的变量。当他们搁一块儿的时候，的确是构成了一个地址。不过，假如只是在某个方法中看到一个孤零零的state呢？我们会推断这个变量是地址的一部分吗？
 
 我们可以添加前缀addrFirstName、addrLastName、addrState等，以此提供语境。至少，读者可以知道这些变量是某个更大变量的一部分。当然，更好的方案是创建名为Address的类。这样，即便是编译器也会知道这些变量是隶属于某个更大的概念了。
 无上下文语境
@@ -209,23 +209,181 @@ public class GuessStatisticsMessage {
 ```
 
 ### 别添加没有意义的语境
-比如在开发一个GSD应用程序，类命名为GSDAccountAddress，其中GSD、Account都是与当前语境毫无关联的。
+* 比如在开发一个GSD应用程序，类命名为GSDAccountAddress，其中GSD、Account都是与当前语境毫无关联的。
 
 ## 函数
 
+```java
+public static String testableHtml(
+  PageData pageData,
+  boolean includeSuiteSetup
+  ) throws Exception {
+  WikiPage wikiPage = pageData.getWikiPage();
+  StringBuffer buffer = new StringBuffer();
+  if (pageData.hasAttribute("Test")) {
+    if (includeSuiteSetup) {
+      WikiPage suiteSetup = PageCrawlerImpl.getInheritedPage(SuiteResponder.SUITE_SETUP_NAME, wikiPage);
+        if (suiteSetup != null) {
+          WikiPagePath pagePath = suiteSetup.getPageCrawler().getFullPath(suiteSetup);
+          String pagePathName = PathParser.render(pagePath);
+          buffer.append("!include -setup .")
+                .append(pagePathName)
+                .append("\n");
+        }
+    }
+    WikiPage setup = PageCrawlerImpl.getInheritedPage("SetUp", wikiPage);
+    if (setup != null) {
+      WikiPagePath setupPath = wikiPage.getPageCrawler().getFullPath(setup);
+      String setupPathName = PathParser.render(setupPath);
+      buffer.append("!include -setup .")
+            .append(setupPathName)
+            .append("\n");
+    }
+  }
+  buffer.append(pageData.getContent());
+  if (pageData.hasAttribute("Test")) {
+    WikiPage teardown = PageCrawlerImpl.getInheritedPage("TearDown", wikiPage);
+    if (teardown != null) {
+      WikiPagePath tearDownPath = wikiPage.getPageCrawler().getFullPath(teardown);
+      String tearDownPathName = PathParser.render(tearDownPath);
+      buffer.append("\n")
+            .append("!include -teardown .")
+            .append(tearDownPathName)
+            .append("\n");
+  }
+  if (includeSuiteSetup) {
+    WikiPage suiteTeardown = PageCrawlerImpl.getInheritedPage( SuiteResponder.SUITE_TEARDOWN_NAME, wikiPage );
+    if (suiteTeardown != null) {
+      WikiPagePath pagePath = suiteTeardown.getPageCrawler().getFullPath (suiteTeardown);
+      String pagePathName = PathParser.render(pagePath);
+      buffer.append("!include -teardown .")
+            .append(pagePathName)
+            .append("\n");
+    }
+ }
+ }
+ pageData.setContent(buffer.toString());
+ return pageData.getHtml();
+}
+```
+做的事情太多，不同层级的抽象放在了一个函数中  
+程序逻辑脉络不直观清晰  
+多重嵌套  
+重复的逻辑判断  
+
+重构后：
+```java
+ public static String renderPageWithSetupsAndTeardowns(
+   PageData pageData, boolean isSuite
+ ) throws Exception {
+   boolean isTestPage = pageData.hasAttribute("Test");
+   if (isTestPage) {
+     WikiPage testPage = pageData.getWikiPage();
+     StringBuffer newPageContent = new StringBuffer();
+     includeSetupPages(testPage, newPageContent, isSuite);
+     newPageContent.append(pageData.getContent());
+     includeTeardownPages(testPage, newPageContent, isSuite);
+     pageData.setContent(newPageContent.toString());
+   }
+   return pageData.getHtml();
+ }
+```
+
 ### 短小，不超过20行
 ### 一个函数只做一件事
-### 每个函数一个抽象层级，自顶向下读代码规则
+### 每个函数一个抽象层级，自顶向下的阅读顺序
 ### switch语句的抽象
 ### 使用描述性的名词命名函数
+* testableHtml => renderPageWithSetupsAndTeardowns
 ### 函数参数
+* 参数个数尽量地少
+* 参数顺序遵从自然规则，如equal()
 ### 无副作用
+```java
+public class UserValidator {
+  private Cryptographer cryptographer;
+  public boolean checkPassword(String userName, String password) {
+    User user = UserGateway.findByName(userName);
+    if (user != User.NULL) {
+      String codedPhrase = user.getPhraseEncodedByPassword();
+      String phrase = cryptographer.decrypt(codedPhrase, password);
+        if ("Valid Password".equals(phrase)) {
+          Session.initialize();
+          return true;
+      }
+    }
+    return false;
+  }
+}
+```
 ### 分割指令与询问
+函数的目的要么是做什么事，要么是回答什么事，二者不可兼得。
+```java
+public boolean set(String attribute, String value);
+```
+该函数设置某个指定的属性，如果成功返回true, 如果不存在返回false, 所以有以下用法：
+```java
+if (set("username", "unclebob"))...
+```
+从读者角度考虑一下这是什么意思？set成功？还是username以前的值==unclebob
+```java
+if (attributeExists("username")) {
+  setAttribute("username", "unclebob");
+... }
+```
 ### 使用异常代替返回错误码
+```java
+if (deletePage(page) == E_OK) {
+  if (registry.deleteReference(page.name) == E_OK) {
+    if (configKeys.deleteKey(page.name.makeKey()) == E_OK){
+      logger.log("page deleted");
+    } else {
+      logger.log("configKey not deleted");
+    }
+  } else {
+    logger.log("deleteReference from registry failed");
+  }
+} else {
+  logger.log("delete failed");
+  return E_ERROR;
+}
+```
+重构后：
+```java
+try {
+  deletePage(page);
+  registry.deleteReference(page.name);
+  configKeys.deleteKey(page.name.makeKey());
+} catch (Exception e) {
+  logger.log(e.getMessage());
+}
+```
 ### 抽离try/catch
+* 把try/catch代码块的主体抽离出来，另外形成函数。
+```java
+public void delete(Page page) {
+  try {
+    deletePageAndAllReferences(page);
+  } catch (Exception e) {
+    logError(e);
+  }
+}
+
+private void deletePageAndAllReferences(Page page) throws Exception {
+  deletePage(page);
+  registry.deleteReference(page.name);
+  configKeys.deleteKey(page.name.makeKey());
+}
+
+private void logError(Exception e) {
+  logger.log(e.getMessage());
+}
+```
 ### 别重复自己(DRY原则)
 ### 结构化编程，单入单出
-### 打磨代码
+* 保持一个return
+### 反复打磨代码
+
 
 ## 注释
 ### 程序员不能坚持维护注释
