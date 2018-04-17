@@ -119,4 +119,20 @@ if (10 <= $length)
 ```
 和询问的语言表达保持一致，如通常会说“如果长度大于等于10”，而不是“如果10小于等于长度”
 
+## 不要在循环中重复地执行和访问数据库
+```php
+for ($i = 0; $i <= 5; $i++) {
+    $isSendCoupon = Setting::getValueByKey('is_send_coupon');
+    ...
+}
+```
+
+改为：
+```php
+$isSendCoupon = Setting::getValueByKey('is_send_coupon');
+for ($i = 0; $i <= 5; $i++) {
+    ...
+}
+```
+
 ## 在model类中定义与实体类无关的方法
